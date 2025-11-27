@@ -47,7 +47,8 @@ def target_encode(X_train, X_val, X_test, y_train, categorical_cols):
     if not categorical_cols:
         return X_train, X_val, X_test, None
     
-    enc = TargetEncoder(smooth="auto", target_type="continuous")
+    
+    enc = TargetEncoder(smooth="auto", target_type="continuous", random_state=42)
     
     X_train[categorical_cols] = enc.fit_transform(X_train[categorical_cols], y_train)
     X_val[categorical_cols] = enc.transform(X_val[categorical_cols])
@@ -192,8 +193,8 @@ def preprocess(df, target, numeric_cols, categorical_cols=[], binary_cols_knn=[]
     # 3. Numeric imputation
     X_train, X_val, X_test, numeric_imputer = impute_numeric(X_train, X_val, X_test, numeric_cols)
     
-    # 4. Outlier handling
-    X_train, X_val, X_test = handle_outliers(X_train, X_val, X_test, numeric_cols)
+    # 4. Outlier handling (skip for XGBoost)
+    # X_train, X_val, X_test = handle_outliers(X_train, X_val, X_test, numeric_cols)
     
     # 5. Scaling
     X_train, X_val, X_test, scaler = scale_numeric(X_train, X_val, X_test, numeric_cols)
@@ -267,20 +268,47 @@ def main():
     )
     xgb_model.fit(X_train, y_train)
     
-    # 6. Print score (optional)
-    print(f"Validation R²: {xgb_model.score(X_val, y_val):.4f}")
+    # 6. Print score
+    y_val_pred = xgb_model.predict(X_val)
+    
+    val_r2 = xgb_model.score(X_val, y_val)
+    val_rmse = np.sqrt(mean_squared_error(y_val, y_val_pred))
+    val_mae = mean_absolute_error(y_val, y_val_pred)
+    
+    print("=" * 50)
+    print("MODEL EVALUATION (Validation Set)")
+    print("=" * 50)
+    print(f"R²:   {val_r2:.4f}")
+    print(f"RMSE: €{val_rmse:,.0f}")
+    print(f"MAE:  €{val_mae:,.0f}")
+    print("=" * 50)
     
     # 7. Save everything
-    joblib.dump(xgb_model, 'model.joblib')
-    joblib.dump(scaler, 'scaler.joblib')
-    joblib.dump(target_encoder, 'target_encoder.joblib')
-    joblib.dump(numeric_imputer, 'numeric_imputer.joblib')
-    joblib.dump(knn_imputer, 'knn_imputer.joblib')
+    MODEL_PATH = "/Users/astha/data/Data Analysis/Becode_Git/Git/immo-eliza-ML/Model/"
     
-    print("Model and preprocessing objects saved!")
+    joblib.dump(xgb_model, MODEL_PATH + "model.joblib")
+    joblib.dump(scaler, MODEL_PATH + "scaler.joblib")
+    joblib.dump(target_encoder, MODEL_PATH + "target_encoder.joblib")
+    joblib.dump(numeric_imputer, MODEL_PATH + "numeric_imputer.joblib")
+    joblib.dump(knn_imputer, MODEL_PATH + "knn_imputer.joblib")
+    
+    # Save feature order (for predict.py)
+    feature_order = X_train.columns.tolist()
+    joblib.dump(feature_order, MODEL_PATH + "feature_order.joblib")
+    
+    # Save metrics
+    metrics = {
+        'val_r2': val_r2,
+        'val_rmse': val_rmse,
+        'val_mae': val_mae
+    }
+    joblib.dump(metrics, MODEL_PATH + "metrics.joblib")
+
+    print("\nModel and preprocessing objects saved!")
 
 # ============================================
 # SECTION 4: RUN
 # ============================================
 if __name__ == "__main__":
     main()
+
